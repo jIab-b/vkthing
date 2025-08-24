@@ -15,6 +15,13 @@ static bool hasExt(const char* name) {
     return false;
 }
 
+static bool hasLayer(const char* name) {
+    uint32_t count = 0; vkEnumerateInstanceLayerProperties(&count, nullptr);
+    std::vector<VkLayerProperties> layers(count); vkEnumerateInstanceLayerProperties(&count, layers.data());
+    for (auto& l : layers) if (std::strcmp(l.layerName, name) == 0) return true;
+    return false;
+}
+
 bool VulkanRenderer::createInstance() {
     uint32_t extCount = 0; const char** glfwExts = glfwGetRequiredInstanceExtensions(&extCount);
     std::vector<const char*> exts(glfwExts, glfwExts + extCount);
@@ -22,6 +29,8 @@ bool VulkanRenderer::createInstance() {
         exts.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     if (hasExt(VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
         exts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    std::vector<const char*> layers;
+    if (hasLayer("VK_LAYER_KHRONOS_validation")) layers.push_back("VK_LAYER_KHRONOS_validation");
 
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
     app.pApplicationName = "vkthing";
@@ -33,6 +42,8 @@ bool VulkanRenderer::createInstance() {
     ci.ppEnabledExtensionNames = exts.data();
     ci.flags = hasExt(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) ?
                VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR : 0;
+    ci.enabledLayerCount = (uint32_t)layers.size();
+    ci.ppEnabledLayerNames = layers.empty() ? nullptr : layers.data();
     if (vkCreateInstance(&ci, nullptr, &instance_) != VK_SUCCESS) return false;
     setupDebug();
     return true;

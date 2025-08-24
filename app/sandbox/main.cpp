@@ -6,6 +6,7 @@
 #include "engine/renderer/vulkan_renderer.h"
 #include <GLFW/glfw3.h>
 #include <cmath>
+#include <algorithm>
 
 using namespace eng;
 
@@ -33,7 +34,7 @@ int main() {
         const float sensitivity = 0.0025f;
 
         // Mouse look
-        cam.yaw   += static_cast<float>(in.mouseDx) * sensitivity;
+        cam.yaw   -= static_cast<float>(in.mouseDx) * sensitivity;
         cam.pitch -= static_cast<float>(in.mouseDy) * sensitivity;
         cam.pitch = std::clamp(cam.pitch, -1.55f, 1.55f);
         in.mouseDx = in.mouseDy = 0.0;
