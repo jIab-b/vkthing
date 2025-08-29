@@ -3,7 +3,10 @@
 #include <vector>
 #include <optional>
 #include <cstring>
+#include <glm/glm.hpp>
 struct GLFWwindow;
+
+namespace eng::scene { struct Mesh; }
 
 namespace eng::renderer {
     class VulkanRenderer {
@@ -14,6 +17,9 @@ namespace eng::renderer {
         void waitIdle();
         void setVP(const float* vp16);
         void setPointSize(float sz) { pointSize_ = sz; }
+
+        // GLTF mesh support
+        void loadGltfMeshes(const std::vector<eng::scene::Mesh>& meshes);
     private:
         GLFWwindow* window_ = nullptr;
         VkInstance instance_{};
@@ -43,6 +49,13 @@ namespace eng::renderer {
         VkPipeline pipeline_{};
         VkBuffer vbo_{}; VkDeviceMemory vboMem_{}; uint32_t vertexCount_ = 0;
         float vp_[16] = {0}; float pointSize_ = 3.0f;
+        // Mesh pipeline + geometry
+        VkPipeline meshPipeline_{};
+        VkBuffer meshVbo_{}; VkDeviceMemory meshVboMem_{};
+        VkBuffer meshIbo_{}; VkDeviceMemory meshIboMem_{};
+        uint32_t meshVertexCount_ = 0;
+        uint32_t meshIndexCount_ = 0;
+        std::vector<glm::mat4> meshTransforms_;
         // Depth
         VkImage depthImage_{}; VkDeviceMemory depthMem_{}; VkImageView depthView_{}; VkFormat depthFormat_{};
         // Light
@@ -71,6 +84,11 @@ namespace eng::renderer {
         VkFormat findDepthFormat();
         bool createDepthResources();
         void destroyDepthResources();
+
+        // Mesh pipeline methods
+        bool createMeshPipeline(const char* shaderDir);
+        bool createMeshGeometry(const std::vector<eng::scene::Mesh>& meshes);
+        void renderMeshes(VkCommandBuffer cmd);
     public:
         void setLight(const float dir[3], const float color[3], float intensity) {
             std::memcpy(lightDir_, dir, sizeof(lightDir_));

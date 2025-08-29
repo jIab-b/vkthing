@@ -1,11 +1,16 @@
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "engine/core/time.h"
 #include "engine/core/log.h"
 #include "engine/platform/window.h"
 #include "engine/platform/input.h"
 #include "engine/scene/camera.h"
 #include "engine/renderer/vulkan_renderer.h"
+#include "engine/scene/gltf_loader.h"
 #include <GLFW/glfw3.h>
 #include <cmath>
+#include <algorithm>
 
 using namespace eng;
 
@@ -25,6 +30,19 @@ int main() {
         return 1;
     }
 
+    // Load GLTF scene
+    try {
+        auto gltfMeshes = eng::scene::GltfLoader::loadScene("scenes/old_town/scene.gltf");
+        if (!gltfMeshes.empty()) {
+            vk.loadGltfMeshes(gltfMeshes);
+            eng::log::info("Loaded GLTF scene with {} meshes", gltfMeshes.size());
+        } else {
+            eng::log::warn("No meshes loaded from GLTF scene");
+        }
+    } catch (const std::exception& e) {
+        eng::log::error("GLTF loading failed: {}", e.what());
+    }
+
     while (!window.shouldClose()) {
         float dt = timer.tick();
         platform::InputState& in = platform::Input::state();
@@ -33,7 +51,7 @@ int main() {
         const float sensitivity = 0.0025f;
 
         // Mouse look
-        cam.yaw   += static_cast<float>(in.mouseDx) * sensitivity;
+        cam.yaw   -= static_cast<float>(in.mouseDx) * sensitivity;
         cam.pitch -= static_cast<float>(in.mouseDy) * sensitivity;
         cam.pitch = std::clamp(cam.pitch, -1.55f, 1.55f);
         in.mouseDx = in.mouseDy = 0.0;
