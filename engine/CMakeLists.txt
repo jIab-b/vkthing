@@ -129,9 +129,12 @@ add_library(engine_terrain
   terrain/terrain.cpp
 )
 target_include_directories(engine_terrain PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+<<<<<<< HEAD
 if (TARGET tinygltf)
   target_link_libraries(engine_terrain PUBLIC tinygltf)
 endif()
+=======
+>>>>>>> 3905e80f68c6179bda5a7fa09057b1af848a1b2d
 
 # GLM dependency: prefer package, fallback to header-only include path
 set(_glm_ok FALSE)
@@ -158,8 +161,11 @@ endif()
 if (NOT _glm_ok)
   message(FATAL_ERROR "glm not found. Install via vcpkg (glm) or set GLM_DIR/GLM_PATH or VULKAN_SDK to a path containing include/glm.")
 endif()
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 3905e80f68c6179bda5a7fa09057b1af848a1b2d
 
 # Shader compilation
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
