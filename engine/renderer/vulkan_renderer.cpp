@@ -4,7 +4,6 @@
 #include <cstring>
 #include <algorithm>
 #include <stdexcept>
-#include "../terrain/terrain.h"
 #include "../scene/gltf_loader.h"
 
 using namespace eng::renderer;
@@ -272,9 +271,7 @@ bool VulkanRenderer::initialize(GLFWwindow* window) {
     if (!createCommands()) return false;
     if (!createSync()) return false;
     // Shaders directory relative to working dir
-    if (!createTerrainPipeline("shaders")) return false;
-    createMeshPipeline("shaders");  // Optional - don't fail if mesh shaders not found
-    if (!createTerrainGeometry()) return false;
+    if (!createMeshPipeline("shaders")) return false;
     return true;
 }
 
@@ -327,21 +324,8 @@ bool VulkanRenderer::drawFrame(float r, float g, float b) {
     vkCmdSetViewport(cmd, 0, 1, &vp);
     vkCmdSetScissor(cmd, 0, 1, &sc);
 
-    // Render GLTF meshes first (they'll be behind terrain due to depth testing)
+    // Render GLTF meshes
     renderMeshes(cmd);
-
-    // bind and draw points
-    if (pipeline_ && vbo_ && vertexCount_ > 0) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-        struct Push { float vp[16]; float pc0[4]; float lightDir[4]; float lightColor[4]; } push{};
-        std::memcpy(push.vp, vp_, sizeof(vp_));
-        push.pc0[0] = pointSize_;
-        push.lightDir[0] = lightDir_[0]; push.lightDir[1] = lightDir_[1]; push.lightDir[2] = lightDir_[2];
-        push.lightColor[0] = lightColor_[0]; push.lightColor[1] = lightColor_[1]; push.lightColor[2] = lightColor_[2]; push.lightColor[3] = lightIntensity_;
-        vkCmdPushConstants(cmd, pipeLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Push), &push);
-        VkDeviceSize off = 0; vkCmdBindVertexBuffers(cmd, 0, 1, &vbo_, &off);
-        vkCmdDraw(cmd, vertexCount_, 1, 0, 0);
-    }
     vkCmdEndRenderPass(cmd);
     vkEndCommandBuffer(cmd);
 
@@ -375,11 +359,8 @@ void VulkanRenderer::shutdown() {
     inFlight_.clear(); semImageAvail_.clear(); semRenderFinish_.clear();
     if (cmdPool_) { vkDestroyCommandPool(device_, cmdPool_, nullptr); cmdPool_ = VK_NULL_HANDLE; }
     cleanupSwapchain();
-    if (pipeline_) { vkDestroyPipeline(device_, pipeline_, nullptr); pipeline_ = VK_NULL_HANDLE; }
+    if (meshPipelineLayout_) { vkDestroyPipelineLayout(device_, meshPipelineLayout_, nullptr); meshPipelineLayout_ = VK_NULL_HANDLE; }
     if (meshPipeline_) { vkDestroyPipeline(device_, meshPipeline_, nullptr); meshPipeline_ = VK_NULL_HANDLE; }
-    if (pipeLayout_) { vkDestroyPipelineLayout(device_, pipeLayout_, nullptr); pipeLayout_ = VK_NULL_HANDLE; }
-    if (vbo_) { vkDestroyBuffer(device_, vbo_, nullptr); vbo_ = VK_NULL_HANDLE; }
-    if (vboMem_) { vkFreeMemory(device_, vboMem_, nullptr); vboMem_ = VK_NULL_HANDLE; }
     if (meshVbo_) { vkDestroyBuffer(device_, meshVbo_, nullptr); meshVbo_ = VK_NULL_HANDLE; }
     if (meshVboMem_) { vkFreeMemory(device_, meshVboMem_, nullptr); meshVboMem_ = VK_NULL_HANDLE; }
     if (meshIbo_) { vkDestroyBuffer(device_, meshIbo_, nullptr); meshIbo_ = VK_NULL_HANDLE; }
@@ -409,98 +390,11 @@ static std::vector<char> readFile(const char* path) {
     std::vector<char> data(sz); std::fread(data.data(), 1, sz, f); std::fclose(f); return data;
 }
 
-bool VulkanRenderer::createTerrainPipeline(const char* shaderDir) {
-    std::vector<std::string> baseDirs = { shaderDir, "build/shaders", "build/app/sandbox/shaders" };
-    std::vector<char> vs, fs;
-    for (auto& b : baseDirs) {
-        auto v = readFile((b + "/terrain_points.vert.spv").c_str());
-        auto f = readFile((b + "/terrain_points.frag.spv").c_str());
-        if (!v.empty() && !f.empty()) { vs = std::move(v); fs = std::move(f); break; }
-    }
-    if (vs.empty() || fs.empty()) return false;
-    VkShaderModuleCreateInfo smi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-    VkShaderModule vsMod{}, fsMod{};
-    smi.codeSize = vs.size(); smi.pCode = reinterpret_cast<const uint32_t*>(vs.data()); if (vkCreateShaderModule(device_, &smi, nullptr, &vsMod) != VK_SUCCESS) return false;
-    smi.codeSize = fs.size(); smi.pCode = reinterpret_cast<const uint32_t*>(fs.data()); if (vkCreateShaderModule(device_, &smi, nullptr, &fsMod) != VK_SUCCESS) { vkDestroyShaderModule(device_, vsMod, nullptr); return false; }
 
-    VkPipelineShaderStageCreateInfo sstages[2]{};
-    sstages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO; sstages[0].stage = VK_SHADER_STAGE_VERTEX_BIT; sstages[0].module = vsMod; sstages[0].pName = "main";
-    sstages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO; sstages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT; sstages[1].module = fsMod; sstages[1].pName = "main";
 
-    VkVertexInputBindingDescription bind{0, (uint32_t)sizeof(eng::terrain::Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
-    VkVertexInputAttributeDescription attrs[3]{};
-    attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, (uint32_t)offsetof(eng::terrain::Vertex, pos)};
-    attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT, (uint32_t)offsetof(eng::terrain::Vertex, normal)};
-    attrs[2] = {2, 0, VK_FORMAT_R32_SFLOAT, (uint32_t)offsetof(eng::terrain::Vertex, height)};
-    VkPipelineVertexInputStateCreateInfo vis{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-    vis.vertexBindingDescriptionCount = 1; vis.pVertexBindingDescriptions = &bind;
-    vis.vertexAttributeDescriptionCount = 3; vis.pVertexAttributeDescriptions = attrs;
 
-    VkPipelineInputAssemblyStateCreateInfo ias{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
-    ias.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
 
-    VkViewport vp{0,0,(float)swapExtent_.width,(float)swapExtent_.height,0.0f,1.0f};
-    VkRect2D sc{{0,0}, swapExtent_};
-    VkPipelineViewportStateCreateInfo vps{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
-    vps.viewportCount = 1; vps.pViewports = &vp; vps.scissorCount = 1; vps.pScissors = &sc;
 
-    VkPipelineRasterizationStateCreateInfo rs{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
-    rs.polygonMode = VK_POLYGON_MODE_FILL; rs.cullMode = VK_CULL_MODE_NONE; rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; rs.lineWidth = 1.0f;
-
-    VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-    VkPipelineColorBlendAttachmentState cba{}; cba.colorWriteMask = 0xF;
-    VkPipelineColorBlendStateCreateInfo cb{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO}; cb.attachmentCount = 1; cb.pAttachments = &cba;
-
-    VkPipelineDepthStencilStateCreateInfo ds{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-    ds.depthTestEnable = VK_TRUE; ds.depthWriteEnable = VK_TRUE; ds.depthCompareOp = VK_COMPARE_OP_LESS;
-
-    VkDynamicState dynStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-    VkPipelineDynamicStateCreateInfo dyn{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO}; dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
-
-    VkPushConstantRange pcr{}; pcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT; pcr.offset = 0; pcr.size = sizeof(float)*16 + sizeof(float)*4 * 3;
-    VkPipelineLayoutCreateInfo plci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO}; plci.pushConstantRangeCount = 1; plci.pPushConstantRanges = &pcr;
-    if (vkCreatePipelineLayout(device_, &plci, nullptr, &pipeLayout_) != VK_SUCCESS) { vkDestroyShaderModule(device_, vsMod, nullptr); vkDestroyShaderModule(device_, fsMod, nullptr); return false; }
-
-    VkGraphicsPipelineCreateInfo pci{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-    pci.stageCount = 2; pci.pStages = sstages;
-    pci.pVertexInputState = &vis;
-    pci.pInputAssemblyState = &ias;
-    pci.pViewportState = &vps;
-    pci.pRasterizationState = &rs;
-    pci.pMultisampleState = &ms;
-    pci.pColorBlendState = &cb;
-    pci.pDepthStencilState = &ds;
-    pci.pDynamicState = &dyn;
-    pci.layout = pipeLayout_;
-    pci.renderPass = renderPass_;
-    pci.subpass = 0;
-    bool ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline_) == VK_SUCCESS;
-    vkDestroyShaderModule(device_, vsMod, nullptr); vkDestroyShaderModule(device_, fsMod, nullptr);
-    return ok;
-}
-
-bool VulkanRenderer::createTerrainGeometry() {
-    // Generate CPU-side vertices
-    eng::terrain::Settings settings;
-    settings.chunkPoints = 64; settings.radiusChunks = 3; settings.heightScale = 60.0f; settings.frequency = 0.0045f; settings.octaves = 5;
-    auto verts = eng::terrain::generate(settings);
-    vertexCount_ = (uint32_t)verts.size();
-    if (vertexCount_ == 0) return true;
-    VkDeviceSize size = sizeof(eng::terrain::Vertex) * vertexCount_;
-    VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO}; bci.size = size; bci.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    if (vkCreateBuffer(device_, &bci, nullptr, &vbo_) != VK_SUCCESS) return false;
-    VkMemoryRequirements mr{}; vkGetBufferMemoryRequirements(device_, vbo_, &mr);
-    VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO}; mai.allocationSize = mr.size; mai.memoryTypeIndex = findMemoryType(mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    if (vkAllocateMemory(device_, &mai, nullptr, &vboMem_) != VK_SUCCESS) return false;
-    vkBindBufferMemory(device_, vbo_, vboMem_, 0);
-    // upload
-    void* ptr = nullptr; vkMapMemory(device_, vboMem_, 0, size, 0, &ptr);
-    std::memcpy(ptr, verts.data(), (size_t)size);
-    vkUnmapMemory(device_, vboMem_);
-    return true;
-}
 
 bool VulkanRenderer::createMeshPipeline(const char* shaderDir) {
     // Load mesh shaders
@@ -559,6 +453,20 @@ bool VulkanRenderer::createMeshPipeline(const char* shaderDir) {
     VkDynamicState dynStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
     VkPipelineDynamicStateCreateInfo dyn{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO}; dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
 
+    // Create mesh pipeline layout
+    VkPushConstantRange pcr{};
+    pcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    pcr.offset = 0;
+    pcr.size = sizeof(float) * 16 + sizeof(float) * 4 * 3;  // VP matrix + light data
+    VkPipelineLayoutCreateInfo plci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    plci.pushConstantRangeCount = 1;
+    plci.pPushConstantRanges = &pcr;
+    if (vkCreatePipelineLayout(device_, &plci, nullptr, &meshPipelineLayout_) != VK_SUCCESS) {
+        vkDestroyShaderModule(device_, vsMod, nullptr);
+        vkDestroyShaderModule(device_, fsMod, nullptr);
+        return false;
+    }
+
     VkGraphicsPipelineCreateInfo pci{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
     pci.stageCount = 2; pci.pStages = sstages;
     pci.pVertexInputState = &vis;
@@ -569,7 +477,7 @@ bool VulkanRenderer::createMeshPipeline(const char* shaderDir) {
     pci.pColorBlendState = &cb;
     pci.pDepthStencilState = &ds;
     pci.pDynamicState = &dyn;
-    pci.layout = pipeLayout_;
+    pci.layout = meshPipelineLayout_;
     pci.renderPass = renderPass_;
     pci.subpass = 0;
     bool ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &meshPipeline_) == VK_SUCCESS;
@@ -679,7 +587,7 @@ void VulkanRenderer::renderMeshes(VkCommandBuffer cmd) {
     push.lightColor[0] = lightColor_[0]; push.lightColor[1] = lightColor_[1];
     push.lightColor[2] = lightColor_[2]; push.lightColor[3] = lightIntensity_;
 
-    vkCmdPushConstants(cmd, pipeLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Push), &push);
+    vkCmdPushConstants(cmd, meshPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Push), &push);
 
     VkDeviceSize vboOffset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &meshVbo_, &vboOffset);

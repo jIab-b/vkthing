@@ -110,8 +110,7 @@ add_library(engine_renderer INTERFACE)
 target_include_directories(engine_renderer INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(engine_renderer INTERFACE Vulkan::Vulkan)
 
-add_library(engine_ecs INTERFACE)
-target_include_directories(engine_ecs INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+
 
 # Vulkan renderer implementation
 add_library(engine_renderer_vk
@@ -124,23 +123,13 @@ if (TARGET tinygltf)
   target_link_libraries(engine_renderer_vk PUBLIC tinygltf)
 endif()
 
-add_library(engine_terrain
-  terrain/terrain.h
-  terrain/terrain.cpp
-)
-target_include_directories(engine_terrain PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-<<<<<<< HEAD
-if (TARGET tinygltf)
-  target_link_libraries(engine_terrain PUBLIC tinygltf)
-endif()
-=======
->>>>>>> 3905e80f68c6179bda5a7fa09057b1af848a1b2d
+
 
 # GLM dependency: prefer package, fallback to header-only include path
 set(_glm_ok FALSE)
 find_package(glm QUIET)
 if (TARGET glm::glm)
-  target_link_libraries(engine_terrain PUBLIC glm::glm)
+  target_link_libraries(engine_scene PUBLIC glm::glm)
   set(_glm_ok TRUE)
 else()
   # Allow user/env to supply include path. Common hints: GLM_DIR, GLM_PATH, VULKAN_SDK/Include
@@ -153,7 +142,7 @@ else()
     add_library(glm_header_only INTERFACE)
     target_include_directories(glm_header_only INTERFACE ${GLM_INCLUDE_DIR})
     add_library(glm::glm ALIAS glm_header_only)
-    target_link_libraries(engine_terrain PUBLIC glm::glm)
+    target_link_libraries(engine_scene PUBLIC glm::glm)
     message(STATUS "Using GLM headers from: ${GLM_INCLUDE_DIR}")
     set(_glm_ok TRUE)
   endif()
@@ -161,11 +150,6 @@ endif()
 if (NOT _glm_ok)
   message(FATAL_ERROR "glm not found. Install via vcpkg (glm) or set GLM_DIR/GLM_PATH or VULKAN_SDK to a path containing include/glm.")
 endif()
-<<<<<<< HEAD
-
-
-=======
->>>>>>> 3905e80f68c6179bda5a7fa09057b1af848a1b2d
 
 # Shader compilation
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
@@ -179,18 +163,7 @@ else()
   find_program(GLSLANG_VALIDATOR NAMES glslangValidator REQUIRED)
 endif()
 
-add_custom_command(
-  OUTPUT ${COMPILED_SHADER_DIR}/terrain_points.vert.spv
-  COMMAND ${GLSLANG_VALIDATOR} -V ${SHADER_DIR}/terrain_points.vert -o ${COMPILED_SHADER_DIR}/terrain_points.vert.spv
-  DEPENDS ${SHADER_DIR}/terrain_points.vert
-  COMMENT "Compiling terrain_points.vert"
-)
-add_custom_command(
-  OUTPUT ${COMPILED_SHADER_DIR}/terrain_points.frag.spv
-  COMMAND ${GLSLANG_VALIDATOR} -V ${SHADER_DIR}/terrain_points.frag -o ${COMPILED_SHADER_DIR}/terrain_points.frag.spv
-  DEPENDS ${SHADER_DIR}/terrain_points.frag
-  COMMENT "Compiling terrain_points.frag"
-)
+
 add_custom_command(
   OUTPUT ${COMPILED_SHADER_DIR}/mesh.vert.spv
   COMMAND ${GLSLANG_VALIDATOR} -V ${SHADER_DIR}/mesh.vert -o ${COMPILED_SHADER_DIR}/mesh.vert.spv
@@ -204,8 +177,6 @@ add_custom_command(
   COMMENT "Compiling mesh.frag"
 )
 add_custom_target(shaders ALL DEPENDS
-  ${COMPILED_SHADER_DIR}/terrain_points.vert.spv
-  ${COMPILED_SHADER_DIR}/terrain_points.frag.spv
   ${COMPILED_SHADER_DIR}/mesh.vert.spv
   ${COMPILED_SHADER_DIR}/mesh.frag.spv
 )
@@ -214,8 +185,6 @@ add_custom_target(shaders ALL DEPENDS
 add_custom_command(TARGET shaders POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/app/sandbox/shaders
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          ${COMPILED_SHADER_DIR}/terrain_points.vert.spv
-          ${COMPILED_SHADER_DIR}/terrain_points.frag.spv
           ${COMPILED_SHADER_DIR}/mesh.vert.spv
           ${COMPILED_SHADER_DIR}/mesh.frag.spv
           ${CMAKE_BINARY_DIR}/app/sandbox/shaders

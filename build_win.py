@@ -60,19 +60,12 @@ def cmake_configure(build_dir: str, generator: Optional[str], config: str, build
     # For Visual Studio generator, set architecture explicitly (x64 by default)
     if "Visual Studio" in gen and arch:
         args += ["-A", arch]
-<<<<<<< HEAD
     # GLFW discovery: prioritize third_party, then allow explicit directory or environment hints
     # Preferred: third_party directory first, then explicit paths
     third_party_glfw = os.path.join(os.getcwd(), "third_party", "glfw")
     glfw_dir = (
         glfw_dir
         or (third_party_glfw if os.path.isdir(third_party_glfw) else None)
-=======
-    # GLFW discovery: allow explicit directory or environment hints
-    # Preferred: a directory that contains glfw3Config.cmake
-    glfw_dir = (
-        glfw_dir
->>>>>>> 3905e80f68c6179bda5a7fa09057b1af848a1b2d
         or os.environ.get("glfw3_DIR")
         or os.environ.get("GLFW_DIR")
         or os.environ.get("GLFW_ROOT")
@@ -119,14 +112,9 @@ def cmake_configure(build_dir: str, generator: Optional[str], config: str, build
                 else:
                     # As a last resort, add to CMAKE_PREFIX_PATH to help CMake search
                     args += [f"-DCMAKE_PREFIX_PATH={glfw_dir}"]
-<<<<<<< HEAD
-    
     # Set up third_party paths for CMake
     third_party_dir = os.path.join(os.getcwd(), "third_party")
     args += [f"-DTHIRD_PARTY_DIR={third_party_dir}"]
-    
-=======
->>>>>>> 3905e80f68c6179bda5a7fa09057b1af848a1b2d
     if is_single_config(gen):
         args += [f"-DCMAKE_BUILD_TYPE={config}"]
     run(args)

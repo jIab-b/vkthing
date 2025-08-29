@@ -44,12 +44,9 @@ namespace eng::renderer {
         std::vector<VkSemaphore> semImageAvail_;
         std::vector<VkSemaphore> semRenderFinish_;
         std::vector<VkFence> inFlight_;
-        // Terrain pipeline + geometry
-        VkPipelineLayout pipeLayout_{};
-        VkPipeline pipeline_{};
-        VkBuffer vbo_{}; VkDeviceMemory vboMem_{}; uint32_t vertexCount_ = 0;
         float vp_[16] = {0}; float pointSize_ = 3.0f;
         // Mesh pipeline + geometry
+        VkPipelineLayout meshPipelineLayout_{};
         VkPipeline meshPipeline_{};
         VkBuffer meshVbo_{}; VkDeviceMemory meshVboMem_{};
         VkBuffer meshIbo_{}; VkDeviceMemory meshIboMem_{};
@@ -79,8 +76,6 @@ namespace eng::renderer {
 
         // helpers
         uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags props);
-        bool createTerrainPipeline(const char* shaderDir);
-        bool createTerrainGeometry();
         VkFormat findDepthFormat();
         bool createDepthResources();
         void destroyDepthResources();
