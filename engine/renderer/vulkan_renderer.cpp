@@ -259,19 +259,55 @@ bool VulkanRenderer::createSync() {
 
 bool VulkanRenderer::initialize(GLFWwindow* window) {
     window_ = window;
-    if (!createInstance()) return false;
-    if (!createSurface()) return false;
-    if (!pickPhysicalDevice()) return false;
-    if (!createDevice()) return false;
-    if (!createSwapchain()) return false;
-    if (!createImageViews()) return false;
-    if (!createRenderPass()) return false;
-    if (!createDepthResources()) return false;
-    if (!createFramebuffers()) return false;
-    if (!createCommands()) return false;
-    if (!createSync()) return false;
+    printf("VulkanRenderer: Creating Vulkan instance...\n");
+    if (!createInstance()) { printf("VulkanRenderer: FAILED - createInstance()\n"); return false; }
+    printf("VulkanRenderer: Instance created successfully\n");
+
+    printf("VulkanRenderer: Creating surface...\n");
+    if (!createSurface()) { printf("VulkanRenderer: FAILED - createSurface()\n"); return false; }
+    printf("VulkanRenderer: Surface created successfully\n");
+
+    printf("VulkanRenderer: Picking physical device...\n");
+    if (!pickPhysicalDevice()) { printf("VulkanRenderer: FAILED - pickPhysicalDevice()\n"); return false; }
+    printf("VulkanRenderer: Physical device selected\n");
+
+    printf("VulkanRenderer: Creating logical device...\n");
+    if (!createDevice()) { printf("VulkanRenderer: FAILED - createDevice()\n"); return false; }
+    printf("VulkanRenderer: Logical device created\n");
+
+    printf("VulkanRenderer: Creating swapchain...\n");
+    if (!createSwapchain()) { printf("VulkanRenderer: FAILED - createSwapchain()\n"); return false; }
+    printf("VulkanRenderer: Swapchain created\n");
+
+    printf("VulkanRenderer: Creating image views...\n");
+    if (!createImageViews()) { printf("VulkanRenderer: FAILED - createImageViews()\n"); return false; }
+    printf("VulkanRenderer: Image views created\n");
+
+    printf("VulkanRenderer: Creating render pass...\n");
+    if (!createRenderPass()) { printf("VulkanRenderer: FAILED - createRenderPass()\n"); return false; }
+    printf("VulkanRenderer: Render pass created\n");
+
+    printf("VulkanRenderer: Creating depth resources...\n");
+    if (!createDepthResources()) { printf("VulkanRenderer: FAILED - createDepthResources()\n"); return false; }
+    printf("VulkanRenderer: Depth resources created\n");
+
+    printf("VulkanRenderer: Creating framebuffers...\n");
+    if (!createFramebuffers()) { printf("VulkanRenderer: FAILED - createFramebuffers()\n"); return false; }
+    printf("VulkanRenderer: Framebuffers created\n");
+
+    printf("VulkanRenderer: Creating command buffers...\n");
+    if (!createCommands()) { printf("VulkanRenderer: FAILED - createCommands()\n"); return false; }
+    printf("VulkanRenderer: Command buffers created\n");
+
+    printf("VulkanRenderer: Creating synchronization objects...\n");
+    if (!createSync()) { printf("VulkanRenderer: FAILED - createSync()\n"); return false; }
+    printf("VulkanRenderer: Synchronization objects created\n");
+
+    printf("VulkanRenderer: Creating mesh pipeline...\n");
     // Shaders directory relative to working dir
-    if (!createMeshPipeline("shaders")) return false;
+    if (!createMeshPipeline("shaders")) { printf("VulkanRenderer: FAILED - createMeshPipeline()\n"); return false; }
+    printf("VulkanRenderer: Mesh pipeline created successfully\n");
+
     return true;
 }
 
@@ -397,19 +433,47 @@ static std::vector<char> readFile(const char* path) {
 
 
 bool VulkanRenderer::createMeshPipeline(const char* shaderDir) {
+    printf("MeshPipeline: Loading shaders from directory: %s\n", shaderDir);
+
     // Load mesh shaders
-    auto vsCode = readFile((std::string(shaderDir) + "/mesh.vert.spv").c_str());
-    auto fsCode = readFile((std::string(shaderDir) + "/mesh.frag.spv").c_str());
-    if (vsCode.empty() || fsCode.empty()) return false;
+    std::string vsPath = std::string(shaderDir) + "/mesh.vert.spv";
+    std::string fsPath = std::string(shaderDir) + "/mesh.frag.spv";
+
+    printf("MeshPipeline: Loading vertex shader: %s\n", vsPath.c_str());
+    auto vsCode = readFile(vsPath.c_str());
+    printf("MeshPipeline: Loading fragment shader: %s\n", fsPath.c_str());
+    auto fsCode = readFile(fsPath.c_str());
+
+    if (vsCode.empty()) {
+        printf("MeshPipeline: FAILED - Vertex shader file is empty or not found: %s\n", vsPath.c_str());
+        return false;
+    }
+    if (fsCode.empty()) {
+        printf("MeshPipeline: FAILED - Fragment shader file is empty or not found: %s\n", fsPath.c_str());
+        return false;
+    }
+
+    printf("MeshPipeline: Shaders loaded successfully (VS: %zu bytes, FS: %zu bytes)\n", vsCode.size(), fsCode.size());
 
     VkShaderModule vsMod, fsMod;
     VkShaderModuleCreateInfo smci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+
+    printf("MeshPipeline: Creating vertex shader module...\n");
     smci.codeSize = vsCode.size(); smci.pCode = reinterpret_cast<const uint32_t*>(vsCode.data());
-    if (vkCreateShaderModule(device_, &smci, nullptr, &vsMod) != VK_SUCCESS) return false;
+    if (vkCreateShaderModule(device_, &smci, nullptr, &vsMod) != VK_SUCCESS) {
+        printf("MeshPipeline: FAILED - Could not create vertex shader module\n");
+        return false;
+    }
+
+    printf("MeshPipeline: Creating fragment shader module...\n");
     smci.codeSize = fsCode.size(); smci.pCode = reinterpret_cast<const uint32_t*>(fsCode.data());
     if (vkCreateShaderModule(device_, &smci, nullptr, &fsMod) != VK_SUCCESS) {
-        vkDestroyShaderModule(device_, vsMod, nullptr); return false;
+        printf("MeshPipeline: FAILED - Could not create fragment shader module\n");
+        vkDestroyShaderModule(device_, vsMod, nullptr);
+        return false;
     }
+
+    printf("MeshPipeline: Shader modules created successfully\n");
 
     VkPipelineShaderStageCreateInfo sstages[2]{};
     sstages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;

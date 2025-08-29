@@ -11,8 +11,32 @@
 #include <GLFW/glfw3.h>
 #include <cmath>
 #include <algorithm>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 using namespace eng;
+
+// Path resolution utilities
+std::string findProjectRoot() {
+    fs::path current = fs::current_path();
+
+    // Try to find the project root by looking for the "scenes" directory
+    while (current != current.parent_path()) {
+        if (fs::exists(current / "scenes") && fs::exists(current / "scenes" / "old_town")) {
+            return current.string();
+        }
+        current = current.parent_path();
+    }
+
+    // Fallback: assume we're in the project root
+    return fs::current_path().string();
+}
+
+std::string getGltfPath() {
+    std::string root = findProjectRoot();
+    return root + "/scenes/old_town/scene.gltf";
+}
 
 int main() {
     platform::WindowCreateInfo wci; wci.title = "Sandbox"; wci.width = 1280; wci.height = 720;
@@ -22,25 +46,62 @@ int main() {
     scene::Camera cam;
     time::DeltaTimer timer;
 
-    eng::log::info("Sandbox started. WASD + Mouse to move. ESC to quit.");
+    printf("Sandbox started. WASD + Mouse to move. ESC to quit.\n");
 
-    renderer::VulkanRenderer vk;
-    if (!vk.initialize(window.handle())) {
-        eng::log::error("Failed to init Vulkan renderer");
+    // Check if window was created successfully
+    if (!window.handle()) {
+        printf("ERROR: Window creation failed\n");
         return 1;
     }
+    printf("Window created successfully\n");
+
+    printf("Creating VulkanRenderer object...\n");
+    renderer::VulkanRenderer vk;
+    printf("VulkanRenderer object created successfully\n");
+    printf("Initializing Vulkan renderer...\n");
+    if (!vk.initialize(window.handle())) {
+        printf("ERROR: Failed to init Vulkan renderer\n");
+        return 1;
+    }
+    printf("Vulkan renderer initialized successfully\n");
 
     // Load GLTF scene
+    std::string gltfPath = getGltfPath();
+    printf("Loading GLTF scene from: %s\n", gltfPath.c_str());
     try {
-        auto gltfMeshes = eng::scene::GltfLoader::loadScene("scenes/old_town/scene.gltf");
+        auto gltfMeshes = eng::scene::GltfLoader::loadScene(gltfPath);
+        printf("GLTF loading completed, got %zu meshes\n", gltfMeshes.size());
+
         if (!gltfMeshes.empty()) {
+            // TEMPORARY FIX: Use known bounds from GLTF file instead of calculated bounds
+            // This bypasses the bounds calculation issue for immediate testing
+            printf("Using known scene bounds (temporary fix)...\n");
+            eng::scene::SceneBounds sceneBounds;
+            sceneBounds.min = glm::vec3(-41029.0f, -55588.0f, -20070.0f);
+            sceneBounds.max = glm::vec3(86968.0f, 72227.0f, 36623.0f);
+            sceneBounds.center = (sceneBounds.min + sceneBounds.max) * 0.5f;
+            sceneBounds.radius = glm::length(sceneBounds.max - sceneBounds.center);
+
+            printf("Known bounds: min(%.1f, %.1f, %.1f) max(%.1f, %.1f, %.1f) radius=%.1f\n",
+                   sceneBounds.min.x, sceneBounds.min.y, sceneBounds.min.z,
+                   sceneBounds.max.x, sceneBounds.max.y, sceneBounds.max.z,
+                   sceneBounds.radius);
+
+            printf("Adjusting camera for scene...\n");
+            cam.adjustForScene(sceneBounds);
+
+            // TODO: Remove this temporary fix once bounds calculation is working
+            // auto sceneBounds = eng::scene::GltfLoader::getSceneBounds(gltfMeshes);
+
+            // Load meshes into renderer
+            printf("Loading meshes into Vulkan renderer...\n");
             vk.loadGltfMeshes(gltfMeshes);
-            eng::log::info("Loaded GLTF scene with {} meshes", gltfMeshes.size());
+            printf("Successfully loaded GLTF scene with %zu meshes\n", gltfMeshes.size());
         } else {
-            eng::log::warn("No meshes loaded from GLTF scene");
+            printf("ERROR: No meshes loaded from GLTF scene\n");
         }
     } catch (const std::exception& e) {
-        eng::log::error("GLTF loading failed: {}", e.what());
+        printf("ERROR: GLTF loading failed: %s\n", e.what());
     }
 
     while (!window.shouldClose()) {

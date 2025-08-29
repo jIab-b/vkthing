@@ -1,4 +1,5 @@
 #include "gltf_loader.h"
+#include "camera.h"  // For SceneBounds definition
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -93,9 +94,22 @@ void GltfLoader::extractMeshData(const tinygltf::Model& model,
 
     // Extract vertices
     vertices.resize(posAccessor.count);
+
+    // Debug: print first few vertex coordinates
+    printf("DEBUG: Loading %zu vertices from accessor\n", posAccessor.count);
+    printf("DEBUG: Position accessor range: min(%.1f, %.1f, %.1f) max(%.1f, %.1f, %.1f)\n",
+           posAccessor.minValues[0], posAccessor.minValues[1], posAccessor.minValues[2],
+           posAccessor.maxValues[0], posAccessor.maxValues[1], posAccessor.maxValues[2]);
+
     for (size_t i = 0; i < posAccessor.count; ++i) {
         MeshVertex& vertex = vertices[i];
         vertex.position = glm::vec3(posData[i * 3], posData[i * 3 + 1], posData[i * 3 + 2]);
+
+        // Debug: print first 3 vertices
+        if (i < 3) {
+            printf("DEBUG: Vertex %zu raw position: (%.1f, %.1f, %.1f)\n",
+                   i, posData[i * 3], posData[i * 3 + 1], posData[i * 3 + 2]);
+        }
 
         if (normalData) {
             vertex.normal = glm::vec3(normalData[i * 3], normalData[i * 3 + 1], normalData[i * 3 + 2]);
@@ -205,6 +219,36 @@ std::vector<Mesh> GltfLoader::loadScene(const std::string& gltfPath) {
 
     std::cout << "Loaded " << meshes.size() << " meshes from GLTF scene" << std::endl;
     return meshes;
+}
+
+SceneBounds GltfLoader::getSceneBounds(const std::vector<Mesh>& meshes) {
+    SceneBounds bounds;
+
+    if (meshes.empty()) {
+        std::cout << "Warning: No meshes provided for bounds calculation" << std::endl;
+        return bounds;
+    }
+
+    std::cout << "Calculating scene bounds for " << meshes.size() << " meshes..." << std::endl;
+
+    for (const auto& mesh : meshes) {
+        // Apply mesh transform to each vertex
+        for (const auto& vertex : mesh.vertices) {
+            glm::vec4 transformedPos = mesh.transform * glm::vec4(vertex.position, 1.0f);
+            glm::vec3 worldPos = glm::vec3(transformedPos);
+            bounds.update(worldPos);
+        }
+    }
+
+    bounds.finalize();
+
+    std::cout << "Scene bounds calculated:" << std::endl;
+    std::cout << "  Min: (" << bounds.min.x << ", " << bounds.min.y << ", " << bounds.min.z << ")" << std::endl;
+    std::cout << "  Max: (" << bounds.max.x << ", " << bounds.max.y << ", " << bounds.max.z << ")" << std::endl;
+    std::cout << "  Center: (" << bounds.center.x << ", " << bounds.center.y << ", " << bounds.center.z << ")" << std::endl;
+    std::cout << "  Radius: " << bounds.radius << std::endl;
+
+    return bounds;
 }
 
 } // namespace eng::scene
