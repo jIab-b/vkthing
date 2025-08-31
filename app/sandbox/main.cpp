@@ -127,6 +127,7 @@ int main() {
         if (in.keys[GLFW_KEY_D]) move += right;
         if (in.keys[GLFW_KEY_SPACE]) move.y += 1.0f;
         if (in.keys[GLFW_KEY_LEFT_SHIFT]) move.y -= 1.0f;
+        if (glfwGetMouseButton(window.handle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) move.y -= 1.0f;
         if (glm::length(move) > 0.0f) cam.position += glm::normalize(move) * speed * dt;
 
         if (in.keys[GLFW_KEY_ESCAPE]) glfwSetWindowShouldClose(window.handle(), 1);
