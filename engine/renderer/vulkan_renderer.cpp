@@ -304,8 +304,8 @@ bool VulkanRenderer::initialize(GLFWwindow* window) {
     printf("VulkanRenderer: Synchronization objects created\n");
 
     printf("VulkanRenderer: Creating mesh pipeline...\n");
-    // Shaders directory relative to working dir
-    if (!createMeshPipeline("shaders")) { printf("VulkanRenderer: FAILED - createMeshPipeline()\n"); return false; }
+    // Shader directory will be auto-detected from multiple possible locations
+    if (!createMeshPipeline("")) { printf("VulkanRenderer: FAILED - createMeshPipeline()\n"); return false; }
     printf("VulkanRenderer: Mesh pipeline created successfully\n");
 
     return true;
@@ -433,25 +433,48 @@ static std::vector<char> readFile(const char* path) {
 
 
 bool VulkanRenderer::createMeshPipeline(const char* shaderDir) {
-    printf("MeshPipeline: Loading shaders from directory: %s\n", shaderDir);
+    // Try multiple possible shader directories for directory-agnostic loading
+    const char* shaderPaths[] = {
+        shaderDir,              // Original path (for compatibility)
+        "../shaders",           // When running from Release/ directory
+        "build_win/shaders",    // When running from base directory
+        "build_win/app/sandbox/shaders", // When running from base directory (full path)
+        "shaders",              // When running from build_win/ directory
+        "app/sandbox/shaders"   // When running from build_win/ directory
+    };
 
-    // Load mesh shaders
-    std::string vsPath = std::string(shaderDir) + "/mesh.vert.spv";
-    std::string fsPath = std::string(shaderDir) + "/mesh.frag.spv";
+    std::string vsPath, fsPath;
+    auto vsCode = std::vector<char>();
+    auto fsCode = std::vector<char>();
+    bool foundShaders = false;
+
+    // Try each possible shader path
+    for (const char* path : shaderPaths) {
+        // Skip empty paths
+        if (!path || strlen(path) == 0) continue;
+
+        printf("MeshPipeline: Trying shaders in directory: %s\n", path);
+
+        vsPath = std::string(path) + "/mesh.vert.spv";
+        fsPath = std::string(path) + "/mesh.frag.spv";
+
+        vsCode = readFile(vsPath.c_str());
+        fsCode = readFile(fsPath.c_str());
+
+        if (!vsCode.empty() && !fsCode.empty()) {
+            printf("MeshPipeline: Found shaders in directory: %s\n", path);
+            foundShaders = true;
+            break;
+        }
+    }
+
+    if (!foundShaders) {
+        printf("MeshPipeline: FAILED - Could not find mesh shaders in any expected location\n");
+        return false;
+    }
 
     printf("MeshPipeline: Loading vertex shader: %s\n", vsPath.c_str());
-    auto vsCode = readFile(vsPath.c_str());
     printf("MeshPipeline: Loading fragment shader: %s\n", fsPath.c_str());
-    auto fsCode = readFile(fsPath.c_str());
-
-    if (vsCode.empty()) {
-        printf("MeshPipeline: FAILED - Vertex shader file is empty or not found: %s\n", vsPath.c_str());
-        return false;
-    }
-    if (fsCode.empty()) {
-        printf("MeshPipeline: FAILED - Fragment shader file is empty or not found: %s\n", fsPath.c_str());
-        return false;
-    }
 
     printf("MeshPipeline: Shaders loaded successfully (VS: %zu bytes, FS: %zu bytes)\n", vsCode.size(), fsCode.size());
 
@@ -503,7 +526,7 @@ bool VulkanRenderer::createMeshPipeline(const char* shaderDir) {
     vps.viewportCount = 1; vps.pViewports = &vp; vps.scissorCount = 1; vps.pScissors = &sc;
 
     VkPipelineRasterizationStateCreateInfo rs{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
-    rs.polygonMode = VK_POLYGON_MODE_FILL; rs.cullMode = VK_CULL_MODE_BACK_BIT; rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; rs.lineWidth = 1.0f;
+    rs.polygonMode = VK_POLYGON_MODE_FILL; rs.cullMode = VK_CULL_MODE_BACK_BIT; rs.frontFace = VK_FRONT_FACE_CLOCKWISE; rs.lineWidth = 1.0f;
 
     VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
     ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -667,7 +690,7 @@ void VulkanRenderer::renderMeshes(VkCommandBuffer cmd) {
 void VulkanRenderer::loadGltfMeshes(const std::vector<eng::scene::Mesh>& meshes) {
     // Try to create mesh pipeline if it doesn't exist
     if (!meshPipeline_) {
-        createMeshPipeline("shaders");
+        createMeshPipeline("");
     }
 
     if (!meshPipeline_) {

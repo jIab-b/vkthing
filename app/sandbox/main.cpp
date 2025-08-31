@@ -108,7 +108,7 @@ int main() {
         float dt = timer.tick();
         platform::InputState& in = platform::Input::state();
 
-        const float speed = 10.0f;
+        const float speed = 100000.0f;
         const float sensitivity = 0.0025f;
 
         // Mouse look

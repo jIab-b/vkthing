@@ -7,6 +7,7 @@ static InputState g_state;
 void Input::attach(GLFWwindow* win) {
     glfwSetKeyCallback(win, keyCb);
     glfwSetCursorPosCallback(win, cursorCb);
+    glfwSetMouseButtonCallback(win, mouseCb);
     glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 }
 
@@ -25,5 +26,11 @@ void Input::cursorCb(GLFWwindow*, double xpos, double ypos) {
     g_state.mouseDx = xpos - g_state.lastX;
     g_state.mouseDy = ypos - g_state.lastY;
     g_state.lastX = xpos; g_state.lastY = ypos;
+}
+
+void Input::mouseCb(GLFWwindow*, int button, int action, int) {
+    if (button < 0 || button >= 8) return;
+    if (action == GLFW_PRESS) g_state.mouseButtons[button] = true;
+    else if (action == GLFW_RELEASE) g_state.mouseButtons[button] = false;
 }
 

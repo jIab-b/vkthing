@@ -16,7 +16,9 @@ layout(location = 1) out vec2 outTexCoord;
 layout(location = 2) out vec3 outLightDir;
 
 void main() {
-    gl_Position = pc.vp * vec4(inPosition, 1.0);
+    // TEMPORARY: Visualize normals by extruding geometry
+    vec3 extrudedPos = inPosition + inNormal * 100.0; // Extrude 100 units along normal
+    gl_Position = pc.vp * vec4(extrudedPos, 1.0);
     outNormal = inNormal;
     outTexCoord = inTexCoord;
     outLightDir = pc.lightDir.xyz;

@@ -7,6 +7,7 @@ namespace eng::platform {
         bool firstMouse = true;
         double lastX = 0.0, lastY = 0.0;
         bool keys[512]{};
+        bool mouseButtons[8]{};
     };
 
     class Input {
@@ -16,6 +17,7 @@ namespace eng::platform {
     private:
         static void keyCb(GLFWwindow*, int key, int, int action, int);
         static void cursorCb(GLFWwindow*, double xpos, double ypos);
+        static void mouseCb(GLFWwindow*, int button, int action, int mods);
     };
 }
 
