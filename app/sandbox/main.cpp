@@ -117,17 +117,18 @@ int main() {
         cam.pitch = std::clamp(cam.pitch, -1.55f, 1.55f);
         in.mouseDx = in.mouseDy = 0.0;
 
-        // WASD
-        glm::vec3 fwd{ cosf(cam.pitch) * sinf(cam.yaw), 0.0f, cosf(cam.pitch) * cosf(cam.yaw) };
+        // WASD - Camera-relative movement
+        glm::vec3 fwd{ cosf(cam.pitch) * sinf(cam.yaw), sinf(cam.pitch), cosf(cam.pitch) * cosf(cam.yaw) };
         glm::vec3 right = glm::normalize(glm::cross(fwd, {0,1,0}));
+        glm::vec3 up = glm::normalize(glm::cross(right, fwd));
         glm::vec3 move{0};
         if (in.keys[GLFW_KEY_W]) move += fwd;
         if (in.keys[GLFW_KEY_S]) move -= fwd;
         if (in.keys[GLFW_KEY_A]) move -= right;
         if (in.keys[GLFW_KEY_D]) move += right;
-        if (in.keys[GLFW_KEY_SPACE]) move.y += 1.0f;
-        if (in.keys[GLFW_KEY_LEFT_SHIFT]) move.y -= 1.0f;
-        if (glfwGetMouseButton(window.handle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) move.y -= 1.0f;
+        if (in.keys[GLFW_KEY_SPACE]) move += up;
+        if (in.keys[GLFW_KEY_LEFT_SHIFT]) move -= up;
+        if (glfwGetMouseButton(window.handle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) move -= up;
         if (glm::length(move) > 0.0f) cam.position += glm::normalize(move) * speed * dt;
 
         if (in.keys[GLFW_KEY_ESCAPE]) glfwSetWindowShouldClose(window.handle(), 1);

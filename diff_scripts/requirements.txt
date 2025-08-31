@@ -1,0 +1,5 @@
+diffusers
+controlnet-aux
+huggingface-hub
+safetensors
+transformers

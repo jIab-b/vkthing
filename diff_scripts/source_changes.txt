@@ -1,0 +1,8 @@
+servers/rendering/rendering_server_default.cpp:
+ - Added include: core/config/project_settings.h
+ - Rewrote diffusion_generate to use OS::get_current_rendering_method, viewport_get_render_target, render_target_get_size, render_target_get_texture, render_target_get_override_depth/velocity, and viewport_get_prev_camera_data. Removed invalid Environment/DiffusionModule usage and renderer-specific getters that don't exist.
+modules/diffusion:
+ - Added SCsub to build module sources
+ - Added register_types.h/cpp to register DiffusionEffect and project setting diffusion/enabled
+ - Added diffusion_effect.h/cpp implementing a CompositorEffect that retrieves color, depth, motion vectors, and normal_roughness (Forward+) plus camera/z-near/z-far at POST_OPAQUE stage; enables necessary flags so buffers are produced/resolved
+

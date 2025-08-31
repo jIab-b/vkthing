@@ -4,3 +4,5 @@ third_party/
 scenes/
 build_linux/
 build_win/
+diff_scripts/venv/
+*.png
