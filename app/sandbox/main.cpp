@@ -96,6 +96,7 @@ int main() {
             // Load meshes into renderer
             printf("Loading meshes into Vulkan renderer...\n");
             vk.loadGltfMeshes(gltfMeshes);
+            vk.enableExports(renderer::VulkanRenderer::ExportColor | renderer::VulkanRenderer::ExportNormal | renderer::VulkanRenderer::ExportMotion | renderer::VulkanRenderer::ExportDepth);
             printf("Successfully loaded GLTF scene with %zu meshes\n", gltfMeshes.size());
         } else {
             printf("ERROR: No meshes loaded from GLTF scene\n");

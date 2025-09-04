@@ -67,29 +67,29 @@ void GltfLoader::extractMeshData(const tinygltf::Model& model,
     const tinygltf::Accessor& posAccessor = model.accessors[posIt->second];
     const tinygltf::BufferView& posView = model.bufferViews[posAccessor.bufferView];
     const tinygltf::Buffer& posBuffer = model.buffers[posView.buffer];
-    const float* posData = reinterpret_cast<const float*>(
-        &posBuffer.data[posView.byteOffset + posAccessor.byteOffset]);
+    size_t posStride = posView.byteStride ? posView.byteStride : sizeof(float) * 3;
+    const unsigned char* posBase = &posBuffer.data[posView.byteOffset + posAccessor.byteOffset];
 
     // Get normal attribute
-    const float* normalData = nullptr;
+    const unsigned char* normalBase = nullptr; size_t normalStride = 0;
     auto normalIt = primitive.attributes.find("NORMAL");
     if (normalIt != primitive.attributes.end()) {
         const tinygltf::Accessor& normalAccessor = model.accessors[normalIt->second];
         const tinygltf::BufferView& normalView = model.bufferViews[normalAccessor.bufferView];
         const tinygltf::Buffer& normalBuffer = model.buffers[normalView.buffer];
-        normalData = reinterpret_cast<const float*>(
-            &normalBuffer.data[normalView.byteOffset + normalAccessor.byteOffset]);
+        normalStride = normalView.byteStride ? normalView.byteStride : sizeof(float) * 3;
+        normalBase = &normalBuffer.data[normalView.byteOffset + normalAccessor.byteOffset];
     }
 
     // Get texcoord attribute
-    const float* texCoordData = nullptr;
+    const unsigned char* texBase = nullptr; size_t texStride = 0;
     auto texIt = primitive.attributes.find("TEXCOORD_0");
     if (texIt != primitive.attributes.end()) {
         const tinygltf::Accessor& texAccessor = model.accessors[texIt->second];
         const tinygltf::BufferView& texView = model.bufferViews[texAccessor.bufferView];
         const tinygltf::Buffer& texBuffer = model.buffers[texView.buffer];
-        texCoordData = reinterpret_cast<const float*>(
-            &texBuffer.data[texView.byteOffset + texAccessor.byteOffset]);
+        texStride = texView.byteStride ? texView.byteStride : sizeof(float) * 2;
+        texBase = &texBuffer.data[texView.byteOffset + texAccessor.byteOffset];
     }
 
     // Extract vertices
@@ -103,7 +103,8 @@ void GltfLoader::extractMeshData(const tinygltf::Model& model,
 
     for (size_t i = 0; i < posAccessor.count; ++i) {
         MeshVertex& vertex = vertices[i];
-        vertex.position = glm::vec3(posData[i * 3], posData[i * 3 + 1], posData[i * 3 + 2]);
+        const float* posData = reinterpret_cast<const float*>(posBase + i * posStride);
+        vertex.position = glm::vec3(posData[0], posData[1], posData[2]);
 
         // Debug: print first 3 vertices
         if (i < 3) {
@@ -111,14 +112,16 @@ void GltfLoader::extractMeshData(const tinygltf::Model& model,
                    i, posData[i * 3], posData[i * 3 + 1], posData[i * 3 + 2]);
         }
 
-        if (normalData) {
-            vertex.normal = glm::vec3(normalData[i * 3], normalData[i * 3 + 1], normalData[i * 3 + 2]);
+        if (normalBase) {
+            const float* nd = reinterpret_cast<const float*>(normalBase + i * normalStride);
+            vertex.normal = glm::vec3(nd[0], nd[1], nd[2]);
         } else {
             vertex.normal = glm::vec3(0.0f, 1.0f, 0.0f); // Default normal
         }
 
-        if (texCoordData) {
-            vertex.texCoord = glm::vec2(texCoordData[i * 2], texCoordData[i * 2 + 1]);
+        if (texBase) {
+            const float* td = reinterpret_cast<const float*>(texBase + i * texStride);
+            vertex.texCoord = glm::vec2(td[0], td[1]);
         } else {
             vertex.texCoord = glm::vec2(0.0f, 0.0f);
         }
@@ -132,15 +135,18 @@ void GltfLoader::extractMeshData(const tinygltf::Model& model,
 
         indices.resize(indexAccessor.count);
 
-        if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
-            const uint16_t* indexData = reinterpret_cast<const uint16_t*>(
-                &indexBuffer.data[indexView.byteOffset + indexAccessor.byteOffset]);
+        if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
+            const uint8_t* indexData = reinterpret_cast<const uint8_t*>(&indexBuffer.data[indexView.byteOffset + indexAccessor.byteOffset]);
+            for (size_t i = 0; i < indexAccessor.count; ++i) {
+                indices[i] = static_cast<uint32_t>(indexData[i]);
+            }
+        } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+            const uint16_t* indexData = reinterpret_cast<const uint16_t*>(&indexBuffer.data[indexView.byteOffset + indexAccessor.byteOffset]);
             for (size_t i = 0; i < indexAccessor.count; ++i) {
                 indices[i] = static_cast<uint32_t>(indexData[i]);
             }
         } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
-            const uint32_t* indexData = reinterpret_cast<const uint32_t*>(
-                &indexBuffer.data[indexView.byteOffset + indexAccessor.byteOffset]);
+            const uint32_t* indexData = reinterpret_cast<const uint32_t*>(&indexBuffer.data[indexView.byteOffset + indexAccessor.byteOffset]);
             std::memcpy(indices.data(), indexData, indexAccessor.count * sizeof(uint32_t));
         }
     }
@@ -170,7 +176,12 @@ std::vector<Mesh> GltfLoader::loadScene(const std::string& gltfPath) {
     tinygltf::Model model;
     std::string err, warn;
 
-    bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, gltfPath);
+    bool ret = false;
+    if (gltfPath.rfind(".glb") != std::string::npos || gltfPath.rfind(".GLB") != std::string::npos) {
+        ret = loader.LoadBinaryFromFile(&model, &err, &warn, gltfPath);
+    } else {
+        ret = loader.LoadASCIIFromFile(&model, &err, &warn, gltfPath);
+    }
 
     if (!warn.empty()) {
         std::cout << "GLTF Warning: " << warn << std::endl;
