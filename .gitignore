@@ -4,3 +4,6 @@ third_party/
 scenes/
 build_linux/
 build_win/
+scenes/
+app/
+diff_scripts/
